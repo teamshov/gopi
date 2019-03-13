@@ -30,6 +30,8 @@ var (
 type Packet struct {
 	ID   string
 	RSSI int
+	TempInc bool
+	Temp float64
 }
 
 var ids = make(chan Packet, 1)
@@ -52,19 +54,27 @@ func loop() {
 			xx := math.Pow(x-b["xpos"].(float64), 2)
 			yy := math.Pow(y-b["ypos"].(float64), 2)
 			dis := math.Sqrt(xx + yy)
+			var tmp float64;
+			if val, ok := b["tmp"].(float64); ok {
+				tmp = val;
+			}
+			if pack.TempInc {
+				tmp = pack.Temp
+			}
 
-			offset := math.Log10(dis)*25 + float64(pack.RSSI)
+			offset := float64(pack.RSSI) - 25*math.Log10(dis)
 			fmt.Printf("Device:%s, dis:%f, rssi:%i, offset:%f\n", id, dis, pack.RSSI, offset)
-			putDevice(id, offset, dis)
+			putDevice(id, offset, dis, tmp)
 		}
 	}
 }
 
-func putDevice(id string, offset float64, dis float64) {
-	_, err := resty.R().
-		SetFormData(map[string]string{
+func putDevice(id string, offset float64, dis float64, temp float64) {
+	resp, err := resty.R().
+		SetBody(map[string]string{
 			"offset": fmt.Sprintf("%f", offset),
 			"distance": fmt.Sprintf("%f", dis),
+			"temp": fmt.Sprintf("%f", temp),
 		}).
 		Put("http://omaraa.ddns.net:62027/db/beacons/" + id)
 
@@ -72,10 +82,7 @@ func putDevice(id string, offset float64, dis float64) {
 		panic(err)
 	}
 
-	fmt.Println(map[string]interface{}{
-		"_id":    id,
-		"offset": offset,
-	})
+	fmt.Println(resp)
 }
 
 func main() {
@@ -123,7 +130,7 @@ func advHandler(a ble.Advertisement) {
 		data := a.ServiceData()[0].Data
 
 		if len(data) > 0 {
-			if data[0]&0x0F == 0x02 {
+			if data[0]&0x0F == 0x02{
 				id := hex.EncodeToString(data[1:9])
 				if _, ok := devices[id]; !ok {
 					devices[id] = 1
@@ -132,7 +139,20 @@ func advHandler(a ble.Advertisement) {
 
 				devices[id] = devices[id] + 1
 				devicesRSum[id] = devicesRSum[id] + a.RSSI()
-				ids <- Packet{ID: id, RSSI: devicesRSum[id] / devices[id]}
+
+				var tmp float64 = 0;
+				tmpb := false;
+				if data[9] & 0x03 == 1 {
+					tmpb = true;
+					tmpraw := float64(((data[17] & 0x03) << 10) | (data[16] << 2) | ((data[15] & 0xC0) >> 6));
+					if tmpraw > 2047 {
+						tmpraw = tmpraw - 4096;
+					}
+					tmp = tmpraw / 16.0;
+
+				}
+
+				ids <- Packet{ID: id, RSSI: devicesRSum[id] / devices[id], TempInc: tmpb, Temp: tmp}
 
 			}
 		}
