@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 	"github.com/tarm/serial"
 )
 
@@ -10,6 +11,7 @@ var s *serial.Port
 func rroutine() {
 	for {
 		s.Write([]byte("test"))
+		time.Sleep(1*time.Second)
 	}
 }
 

@@ -62,7 +62,7 @@ func loop() {
 				tmp = pack.Temp
 			}
 
-			offset := float64(pack.RSSI) - 25*math.Log10(dis)
+			offset := float64(pack.RSSI);
 			fmt.Printf("Device:%s, dis:%f, rssi:%i, offset:%f\n", id, dis, pack.RSSI, offset)
 			putDevice(id, offset, dis, tmp)
 		}
